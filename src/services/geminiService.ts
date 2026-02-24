@@ -40,7 +40,14 @@ Retorne um JSON com:
 `;
 
 export async function getChatResponse(history: { role: 'user' | 'model', parts: { text: string }[] }[]) {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const apiKey = process.env.GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    console.error("ERRO: GEMINI_API_KEY não encontrada. Certifique-se de configurá-la nas variáveis de ambiente do seu projeto (Vercel/Local).");
+    throw new Error("Configuração de API ausente.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3.1-pro-preview";
 
   const response = await ai.models.generateContent({

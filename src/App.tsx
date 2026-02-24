@@ -87,7 +87,7 @@ export default function App() {
         setShowWhatsAppButton(true);
       }
     } catch (error) {
-      console.error("Error getting chat response:", error);
+      console.error("Erro detalhado na chamada do Gemini:", error);
       const errorMsg: Message = {
         role: 'model',
         text: "Ops, tive um probleminha aqui. Pode repetir?",
