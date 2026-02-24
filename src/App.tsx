@@ -4,9 +4,9 @@
  */
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { Send, User, Check, CheckCheck, Phone, Video, MoreVertical, Paperclip, Smile } from 'lucide-react';
+import { Send, CheckCheck, Phone, Video, MoreVertical, Paperclip, Smile } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getChatResponse } from './services/geminiService';
+import { STEPS, StepId, interpretAnswer } from './logic/conversation';
 
 interface Message {
   role: 'user' | 'model';
@@ -18,6 +18,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [currentStep, setCurrentStep] = useState<StepId>('START');
   const [isFinished, setIsFinished] = useState(false);
   const [showWhatsAppButton, setShowWhatsAppButton] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -34,11 +35,10 @@ export default function App() {
   useEffect(() => {
     const startChat = async () => {
       setIsTyping(true);
-      // Simulate natural typing delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const initialMsg: Message = {
         role: 'model',
-        text: "Oii 😊 antes de te direcionar para falar com o William, preciso te fazer 3 perguntas rápidas pra entender se esse projeto realmente faz sentido pra você. Pode ser?",
+        text: STEPS['START'].message,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages([initialMsg]);
@@ -49,11 +49,12 @@ export default function App() {
 
   const handleSendMessage = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!inputValue.trim() || isFinished || isTyping) return;
+    const text = inputValue.trim();
+    if (!text || isFinished || isTyping) return;
 
     const userMsg: Message = {
       role: 'user',
-      text: inputValue,
+      text: text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -61,42 +62,46 @@ export default function App() {
     setInputValue('');
     setIsTyping(true);
 
-    try {
-      const history = messages.concat(userMsg).map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
+    // Lógica de interpretação
+    setTimeout(async () => {
+      const answer = interpretAnswer(currentStep, text);
+      let nextStepId: StepId | undefined;
+      let responseText = "";
 
-      const result = await getChatResponse(history);
-      
-      // Simulate typing delay based on message length
-      const delay = Math.min(Math.max(result.response.length * 30, 1000), 3000);
-      await new Promise(resolve => setTimeout(resolve, delay));
-
-      const botMsg: Message = {
-        role: 'model',
-        text: result.response,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages(prev => [...prev, botMsg]);
-      if (result.isFinished) {
-        setIsFinished(true);
+      if (answer) {
+        nextStepId = STEPS[currentStep].next?.[answer];
+      } else {
+        // Se não identificou, pede para escolher uma das opções
+        responseText = "Desculpe, não entendi muito bem. 😊 Por favor, escolha uma das opções acima (A, B ou C) ou responda de forma mais clara.";
+        nextStepId = currentStep; // Mantém no mesmo step
       }
-      if (result.showButton) {
-        setShowWhatsAppButton(true);
+
+      if (nextStepId) {
+        setCurrentStep(nextStepId);
+        const nextStep = STEPS[nextStepId];
+        
+        if (!responseText) {
+          responseText = nextStep.message;
+        }
+
+        const botMsg: Message = {
+          role: 'model',
+          text: responseText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        setMessages(prev => [...prev, botMsg]);
+
+        if (nextStepId === 'SUCCESS') {
+          setShowWhatsAppButton(true);
+          setIsFinished(true);
+        } else if (nextStepId === 'END') {
+          setIsFinished(true);
+        }
       }
-    } catch (error) {
-      console.error("Erro detalhado na chamada do Gemini:", error);
-      const errorMsg: Message = {
-        role: 'model',
-        text: "Ops, tive um probleminha aqui. Pode repetir?",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
+
       setIsTyping(false);
-    }
+    }, 1000);
   };
 
   const WHATSAPP_URL = "https://wa.me/5511994760149?text=Oi%20William,%20acabei%20de%20passar%20pela%20triagem%20e%20quero%20saber%20como%20come%C3%A7ar";
